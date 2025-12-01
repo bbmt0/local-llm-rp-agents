@@ -87,25 +87,10 @@ def extract_image_urls(html: str, base_url: str) -> List[str]:
     return urls
 
 
-def download_image(url: str, dest_dir: str) -> str:
+def download_image(url: str) -> bytes:
     resp = protected_get(url)
-    content_type = resp.headers.get("Content-Type", "")
-    content = resp.content
+    return resp.content
 
-    ext = ".jpg"
-    if "png" in content_type:
-        ext = ".png"
-    elif "jpeg" in content_type:
-        ext = ".jpg"
-
-    filename = f"{file_counter:05d}{os.path.splitext(img_url)[1]}"
-    path = os.path.join(dest_dir, filename)
-
-    with open(path, "wb") as f:
-        f.write(content)
-
-    file_counter += 1 
-    return path
 
 def normalize_topic_url(url: str) -> str:
     url = url.strip()
@@ -137,9 +122,11 @@ def get_faction_name(base_url: str) -> str:
 
 
 def scrape_all_pages(base_url: str, dest_dir: str, start_page: int = 2, max_pages: int = 200) -> None:
-    file_counter = 1
     ensure_dirs()
     os.makedirs(dest_dir, exist_ok=True)
+
+    file_counter = 1
+
 
     for page in range(start_page, max_pages +1):
         url = f"{base_url}/page/{page}/"
@@ -157,14 +144,24 @@ def scrape_all_pages(base_url: str, dest_dir: str, start_page: int = 2, max_page
 
         img_urls = extract_image_urls(html, base_url=url)
         if not img_urls:
-            print(f"Aucune image trouvée -> fin du scraping.")
+            print(f"Aucune image trouvée; fin du scraping")
             break
         print(f"Trouvé {len(img_urls)} images sur la page {page}")
 
         for img_url in img_urls:
             try:
-                path = download_image(img_url, dest_dir)
-                print(f"Téléchargé : {img_url} -> {path}")
+                ext = os.path.splitext(img_url)[1].lower()
+
+                filename = f"{file_counter:05d}{ext}"
+                full_path = os.path.join(dest_dir, filename)
+
+                path = download_image(img_url)
+                with open(full_path, "wb") as f: 
+                    f.write(path)
+                print(f"Téléchargé {file_counter:05d} : {img_url} -> {full_path}")
+
+
+                file_counter += 1
 
                 time.sleep(random.uniform(1.0, 7.5))
             except Exception as e:
