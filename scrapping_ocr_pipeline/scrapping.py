@@ -98,12 +98,13 @@ def download_image(url: str, dest_dir: str) -> str:
     elif "jpeg" in content_type:
         ext = ".jpg"
 
-    filename = f"{uuid.uuid4().hex}{ext}"
+    filename = f"{file_counter:05d}{os.path.splitext(img_url)[1]}"
     path = os.path.join(dest_dir, filename)
 
     with open(path, "wb") as f:
         f.write(content)
 
+    file_counter += 1 
     return path
 
 def normalize_topic_url(url: str) -> str:
@@ -136,6 +137,7 @@ def get_faction_name(base_url: str) -> str:
 
 
 def scrape_all_pages(base_url: str, dest_dir: str, start_page: int = 2, max_pages: int = 200) -> None:
+    file_counter = 1
     ensure_dirs()
     os.makedirs(dest_dir, exist_ok=True)
 
