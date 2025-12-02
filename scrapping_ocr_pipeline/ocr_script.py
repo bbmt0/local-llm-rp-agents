@@ -34,28 +34,42 @@ def list_image_files(folder: str) -> List[str]:
 
 
 def preprocess_image(image_path: str) -> Image.Image:
+    """
+    Pré-traitement pour screen GTA :
+    - crop la zone du haut (zone de chat)
+    - niveaux de gris
+    - upscale x3
+    - léger filtre anti-bruit
+    - autocontrast
+    - binarisation (noir/blanc)
+    """
     img = Image.open(image_path)
-    # 1) niveaux de gris
-    img = img.convert("L")
-    # 2) upscale si trop petit
     w, h = img.size
-    if w < 1000:
-        scale = 2
-        img = img.resize((w * scale, h * scale), Image.LANCZOS)
-    # 3) léger filtre pour réduire le bruit
+
+    # 1) on ne garde que le haut de l'image (zone de texte)
+    # tu peux ajuster 0.30 -> 0.25 / 0.35 suivant tes screens
+    chat_height = int(h * 0.30)
+    img = img.crop((0, 0, w, chat_height))
+
+    # 2) niveaux de gris
+    img = img.convert("L")
+
+    # 3) upscale x3 pour aider Tesseract
+    scale = 4
+    img = img.resize((w * scale, chat_height * scale), Image.Resampling.LANCZOS)
+
+    # 4) léger filtre pour réduire le bruit
     img = img.filter(ImageFilter.MedianFilter(size=3))
-    # 4) augmenter contraste (optionnel, à tester)
+
+    # 5) augmenter contraste
     img = ImageOps.autocontrast(img)
-    # 5) binarisation simple
-    # tu peux ajuster le seuil (128 -> plus agressif ou plus doux)
-    threshold = 140
 
-    def _threshold(x: int) -> int:
-        return 255 if x > threshold else 0
-
-    img = img.point(_threshold)
+    # 6) binarisation simple
+    threshold = 140  # à ajuster, 140–170 en général
+    img = img.point(lambda x: 255 if x > threshold else 0)
 
     return img
+
 
 
 
