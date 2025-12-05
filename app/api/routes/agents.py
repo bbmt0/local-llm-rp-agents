@@ -1,8 +1,12 @@
 from typing import Dict, List
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from app.services.agents_manager import agents_manager, AgentNotFoundError
+from app.services.memory_manager import memory_manager, SessionNotFoundError
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -23,10 +27,15 @@ class MessageRequest(BaseModel):
     meta: Dict[str, str] | None = None
 
 
+class MessageReply(BaseModel):
+    text: str
+    ooc: bool
+
+
 class MessageResponse(BaseModel):
     session_id: str
     agent_id: str
-    reply: Dict[str, str]
+    reply: MessageReply
 
 
 AGENTS: List[Agent] = [
@@ -36,10 +45,6 @@ AGENTS: List[Agent] = [
         description="PNJ RP gangster, style GTA-like, parle français familier.",
     )
 ]
-
-
-# sessions_in_memory[session_id] = {"agent_id": "...", "messages": [...]}
-SESSIONS: Dict[str, Dict] = {}
 
 
 @router.get("", response_model=List[Agent])
@@ -54,7 +59,8 @@ async def create_session(agent_id: str) -> CreateSessionResponse:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     session_id = str(uuid4())
-    SESSIONS[session_id] = {"agent_id": agent_id, "messages": []}
+
+    memory_manager.create_session(session_id=session_id, agent_id=agent_id)
 
     return CreateSessionResponse(session_id=session_id, agent_id=agent_id)
 
@@ -65,30 +71,81 @@ async def send_message(
     session_id: str,
     payload: MessageRequest,
 ) -> MessageResponse:
-    session = SESSIONS.get(session_id)
-    if session is None or session.get("agent_id") != agent_id:
-        raise HTTPException(status_code=404, detail="Session not found for this agent")
+    # 1) Charger la session
+    try:
+        session_data: Dict[str, object] = memory_manager.load_session(session_id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
 
-    user_message = {
+    session_agent_id = session_data.get("agent_id")
+    if session_agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="Session not found for this agent!")
+
+    # 2) Récupérer les messages bruts (ceux du fichier, avec timestamp éventuel)
+    raw_messages_obj = session_data.get("messages")
+    if not isinstance(raw_messages_obj, list):
+        raw_messages: List[Dict[str, object]] = []
+    else:
+        raw_messages = []
+        for msg in raw_messages_obj:
+            if isinstance(msg, dict):
+                raw_messages.append(msg)
+
+    # 3) Construire l'historique à envoyer au LLM (sans timestamp)
+    history_for_llm: List[Dict[str, str]] = []
+    for msg in raw_messages:
+        role = msg.get("role")
+        content = msg.get("content")
+        if isinstance(role, str) and isinstance(content, str):
+            history_for_llm.append({"role": role, "content": content})
+
+    # 4) Ajouter le message utilisateur (dans les deux mondes)
+    current_time = datetime.now().astimezone().isoformat()
+
+    user_msg_full = {
+        "role": "user",
+        "content": payload.message,
+        "timestamp": current_time,
+    }
+    raw_messages.append(user_msg_full)
+
+    user_msg_for_llm = {
         "role": "user",
         "content": payload.message,
     }
-    session["messages"].append(user_message)
+    history_for_llm.append(user_msg_for_llm)
 
-    # Stub pour l’instant : plus tard on appellera ton moteur PNJ + Ollama ici.
-    reply_text = f"[STUB] Réponse RP pour: {payload.message}"
+    # 5) Appeler le LLM via agents_manager
+    try:
+        reply_dict = await agents_manager.generate_reply(
+            agent_id=agent_id,
+            history=history_for_llm,
+            user_message=payload.message,
+        )
+    except AgentNotFoundError:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"LLM error: {exc}")
 
-    assistant_message = {
+    # 6) Ajouter la réponse de l'assistant (dans les deux mondes)
+    current_time_reply = datetime.now().astimezone().isoformat()
+
+    assistant_message_full = {
         "role": "assistant",
-        "content": reply_text,
+        "content": reply_dict["text"],
+        "timestamp": current_time_reply,
     }
-    session["messages"].append(assistant_message)
+    raw_messages.append(assistant_message_full)
+
+    # 7) Sauvegarder les messages complets dans la session
+    session_data["messages"] = raw_messages
+    memory_manager.save_session(session_id=session_id, data=session_data)
+
+    # 8) Construire la réponse HTTP
+    reply_model = MessageReply(text=reply_dict["text"], ooc=reply_dict["ooc"])
 
     return MessageResponse(
         session_id=session_id,
         agent_id=agent_id,
-        reply={
-            "text": reply_text,
-            "ooc": "false",
-        },
+        reply=reply_model,
     )

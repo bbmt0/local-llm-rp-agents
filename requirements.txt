@@ -3,3 +3,4 @@ fastapi
 beautifulsoup4
 pillow
 pytesseract
+httpx
