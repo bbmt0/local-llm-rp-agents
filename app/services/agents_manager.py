@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Dict, List, Any
+
+from pydantic import BaseModel, ValidationError
 
 from app.services.llm_client import LLMClient
 
@@ -9,48 +12,63 @@ from app.services.llm_client import LLMClient
 class AgentNotFoundError(Exception):
     pass
 
+class AgentPersonality(BaseModel):
+    traits: List[str] = []
+    speaking_style: List[str] = []
+    motivations: List[str] = []
+    taboos: List[str] = []
+
+
+class AgentLore(BaseModel):
+    background: str | None = None
+    relations: Dict[str, str] | None = None
+
+
+class AgentMemory(BaseModel):
+    facts_about_player: List[str] = []
+    recent_events: List[str] = []
+    emotion_towards_player: str | None = None
+    trust_level: float | None = None
+
+
+class AgentConfig(BaseModel):
+    id: str
+    name: str
+    role: str
+    system_prompt: str
+    personality: AgentPersonality | None = None
+    lore: AgentLore | None = None
+    memory: AgentMemory | None = None
 
 class AgentManager:
     """
     Gère les prompts des agents, l'appel au LLM et le parsing de la réponse.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, base_dir: str = "data/agents") -> None:
+        self.base_path = Path(base_dir)
         self.llm_client = LLMClient()
-        self.agents_config: Dict[str, Dict[str, Any]] = self._load_agents_config()
+        self.agents_config: Dict[str, AgentConfig]= self._load_agents_config()
 
-    def _load_agents_config(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Pour le MVP, config hardcodée.
-        Plus tard : chargement depuis fichiers JSON / BDD.
-        """
-        gangster_system_prompt = (
-    "Tu es un PNJ dans un serveur de roleplay texte francophone. "
-    "Ton personnage est un gangster de Los Santos, ambiance GTA, langage familier, "
-    "mais tu restes jouable et compréhensible. "
-    "Tu dois STRICTEMENT rester dans le personnage (in-character). "
-    "Tu ne dois jamais mentionner que tu es une IA ou un modèle de langage. "
-    "Lorsque le joueur te donne des informations sur lui-même (par exemple son nom, son surnom, "
-    "son âge, ses affiliations, etc.), tu dois les mémoriser pour toute la session et les réutiliser "
-    "plus tard dans la conversation. "
-    "Si le nom du joueur est déjà apparu plus tôt dans la conversation, tu ne dois JAMAIS prétendre "
-    "que tu l'as oublié ou redemander son nom ; tu dois le réutiliser directement. "
-    "Tu réponds UNIQUEMENT au format JSON suivant :\n\n"
-    "{\n"
-    '  \"reply_text\": \"la réplique RP que tu envoies au joueur\",\n'
-    '  \"is_ooc\": false\n'
-    "}\n\n"
-    "Pas de texte en dehors du JSON. Pas de balises, pas d'explication."
-)
+    def _load_agents_config(self) -> Dict[str, AgentConfig]:
+        configs: Dict[str, AgentConfig] = {}
 
+        if not self.base_path.exists():
+            return configs
 
-        return {
-            "gangster_los_santos": {
-                "system_prompt": gangster_system_prompt,
-            }
-        }
+        for path in self.base_path.glob("*.json"):
+            try: 
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                
+                agent_conf = AgentConfig(**data)
+                configs[agent_conf.id] = agent_conf
+            except (json.JSONDecodeError, ValidationError) as exc: 
+                print(f"[AgentsManager] Erreur de chargement agent depuis {path}: {exc}")
 
-    def _get_agent_config(self, agent_id: str) -> Dict[str, Any]:
+        return configs
+
+    def _get_agent_config(self, agent_id: str) -> AgentConfig:
         config = self.agents_config.get(agent_id)
         if config is None:
             raise AgentNotFoundError(f"Agent inconnu: {agent_id}")
@@ -67,7 +85,7 @@ class AgentManager:
         et renvoie un dict: {\"text\": str, \"ooc\": bool}.
         """
         agent_config = self._get_agent_config(agent_id)
-        system_prompt = agent_config["system_prompt"]
+        system_prompt = agent_config.system_prompt
 
         messages: List[Dict[str, str]] = []
 
