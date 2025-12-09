@@ -79,6 +79,7 @@ class AgentManager:
         agent_id: str,
         history: List[Dict[str, str]],
         user_message: str,
+        session_memory: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """
         Construit le prompt complet, appelle le LLM, parse la réponse JSON

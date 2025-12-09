@@ -33,12 +33,13 @@ class MemoryEngine:
         if not isinstance(emotion, str) and emotion is not None:
             emotion = None
         
-        return (
-            "recent_events" = recent_events, 
-            "facts_about_players" = facts, 
-            "trust_level" = trust_level,
-            "trust_level" = float(trust_level)
-        )
+        return {
+            "recent_events": recent_events, 
+            "facts_about_player": facts, 
+            "trust_level": trust_level,
+            "trust_level": float(trust_level)
+        }
+        
     
     def _extract_fact_from_user(self, user_message: str) -> str | None:
         text = user_message.lower().strip()
@@ -88,7 +89,7 @@ class MemoryEngine:
         
         #extract facts sur le joueur
         fact = self._extract_fact_from_user(user_message)
-            if fact is not None: 
+        if fact is not None: 
                 facts: List[str] = memory("facts_about_player")
                 if fact not in facts:
                     facts.append(fact)

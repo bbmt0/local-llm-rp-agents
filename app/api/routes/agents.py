@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.services.agents_manager import agents_manager, AgentNotFoundError
 from app.services.memory_manager import memory_manager, SessionNotFoundError
+from app.services.memory_engine import memory_engine
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -87,6 +88,21 @@ async def send_message(
     session_agent_id = session_data.get("agent_id")
     if session_agent_id != agent_id:
         raise HTTPException(status_code=404, detail="Session not found for this agent!")
+    
+    raw_sess_memory = session_data.get("memory")
+    if not isinstance(raw_sess_memory, dict):
+        base_memory = None
+        agent_cfg = agents_manager.agents_config.get(agent_id)
+        if agent_cfg is not None and agent_cfg.memory is not None: 
+            base_memory = agent_cfg.memory.model_dump()
+        else:
+            base_memory = {
+                "facts_about_player": [],
+                "recent_events": [],
+                "emotion_towards_player": [],
+                "trust_level": 0.0
+            }
+        raw_sess_memory = base_memory
 
         # 2) Récupérer les messages bruts (ceux du fichier, avec timestamp éventuel)
     raw_messages_obj = session_data.get("messages")
@@ -128,6 +144,7 @@ async def send_message(
                 agent_id=agent_id,
                 history=history_for_llm,
                 user_message=payload.message,
+                session_memory=raw_sess_memory
             )
     except AgentNotFoundError:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -143,9 +160,16 @@ async def send_message(
             "timestamp": current_time_reply,
         }
     raw_messages.append(assistant_message_full)
+    
+    updated_memory  = memory_engine._update_session_memory(
+        session_memory=raw_sess_memory,
+        user_message=payload.message,
+        agent_reply=reply_dict["text"]
+    )
 
         # 7) Sauvegarder les messages complets dans la session
     session_data["messages"] = raw_messages
+    session_data["memory"] = updated_memory
     memory_manager.save_session(session_id=session_id, data=session_data)
 
         # 8) Construire la réponse HTTP
