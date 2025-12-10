@@ -14,7 +14,7 @@ def create_app() -> FastAPI:
     async def healthcheck() -> JSONResponse:
         return JSONResponse(content={"status": "ok"})
 
-    app.include_router(agents_router, prefix="/v0")
+    app.include_router(agents_router)
 
     return app
 

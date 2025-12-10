@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field
 from app.services.agents_manager import agents_manager, AgentNotFoundError
 from app.services.memory_manager import memory_manager, SessionNotFoundError
 from app.services.memory_engine import memory_engine
+from app.services.agents_service import agents_service
 
-router = APIRouter(prefix="/agents", tags=["agents"])
+router = APIRouter(prefix="/v0/agents", tags=["agents"])
 
 
 class Agent(BaseModel):
@@ -43,32 +44,16 @@ class MessageResponse(BaseModel):
 
 @router.get("", response_model=List[Agent])
 async def list_agents() -> List[Agent]:
-    agents: List[Agent] = []
-
-    for config in agents_manager.agents_config.values():
-        if config.lore and config.lore.background:
-            descr = f"{config.role} — {config.lore.background}"
-        else:
-            descr = config.role
-            
-        agents.append(
-            Agent(
-                id= config.id, 
-                name = config.name, 
-                description = descr
-                )
-            )
-    return agents
+    raw_agents = agents_service.list_agents()
+    return [Agent(**a) for a in raw_agents]
 
 
 @router.post("/{agent_id}/sessions", response_model=CreateSessionResponse)
 async def create_session(agent_id: str) -> CreateSessionResponse:
-    if agent_id not in agents_manager.agents_config: 
+    try:
+        session_id = agents_service.create_session(agent_id)
+    except AgentNotFoundError:
         raise HTTPException(status_code=404, detail="Agent not found")
-
-    session_id = str(uuid4())
-
-    memory_manager.create_session(session_id=session_id, agent_id=agent_id)
 
     return CreateSessionResponse(session_id=session_id, agent_id=agent_id)
 
@@ -79,101 +64,26 @@ async def send_message(
     session_id: str,
     payload: MessageRequest,
     ) -> MessageResponse:
-        # 1) Charger la session
     try:
-        session_data: Dict[str, object] = memory_manager.load_session(session_id)
+        result = await agent_service.handle_message(
+            agent_id=agent_id,
+            session_id=session_id,
+            message=payload.message,
+            meta=payload.meta,
+        )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    session_agent_id = session_data.get("agent_id")
-    if session_agent_id != agent_id:
-        raise HTTPException(status_code=404, detail="Session not found for this agent!")
-    
-    raw_sess_memory = session_data.get("memory")
-    if not isinstance(raw_sess_memory, dict):
-        base_memory = None
-        agent_cfg = agents_manager.agents_config.get(agent_id)
-        if agent_cfg is not None and agent_cfg.memory is not None: 
-            base_memory = agent_cfg.memory.model_dump()
-        else:
-            base_memory = {
-                "facts_about_player": [],
-                "recent_events": [],
-                "emotion_towards_player": [],
-                "trust_level": 0.0
-            }
-        raw_sess_memory = base_memory
-
-        # 2) Récupérer les messages bruts (ceux du fichier, avec timestamp éventuel)
-    raw_messages_obj = session_data.get("messages")
-    if not isinstance(raw_messages_obj, list):
-        raw_messages: List[Dict[str, object]] = []
-    else:
-        raw_messages = []
-        for msg in raw_messages_obj:
-            if isinstance(msg, dict):
-                raw_messages.append(msg)
-
-        # 3) Construire l'historique à envoyer au LLM (sans timestamp)
-    history_for_llm: List[Dict[str, str]] = []
-    for msg in raw_messages:
-        role = msg.get("role")
-        content = msg.get("content")
-        if isinstance(role, str) and isinstance(content, str):
-            history_for_llm.append({"role": role, "content": content})
-
-        # 4) Ajouter le message utilisateur (dans les deux mondes)
-    current_time = datetime.now().astimezone().isoformat()
-
-    user_msg_full = {
-            "role": "user",
-            "content": payload.message,
-            "timestamp": current_time,
-        }
-    raw_messages.append(user_msg_full)
-
-    user_msg_for_llm = {
-            "role": "user",
-            "content": payload.message,
-        }
-    history_for_llm.append(user_msg_for_llm)
-
-        # 5) Appeler le LLM via agents_manager
-    try:
-        reply_dict = await agents_manager.generate_reply(
-                agent_id=agent_id,
-                history=history_for_llm,
-                user_message=payload.message,
-                session_memory=raw_sess_memory
-            )
+    except SessionMismatchError:
+        raise HTTPException(status_code=404, detail="Session not found for this agent")
     except AgentNotFoundError:
         raise HTTPException(status_code=404, detail="Agent not found")
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"LLM error: {exc}")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
-        # 6) Ajouter la réponse de l'assistant (dans les deux mondes)
-    current_time_reply = datetime.now().astimezone().isoformat()
-
-    assistant_message_full = {
-            "role": "assistant",
-            "content": reply_dict["text"],
-            "timestamp": current_time_reply,
-        }
-    raw_messages.append(assistant_message_full)
-    
-    updated_memory  = memory_engine._update_session_memory(
-        session_memory=raw_sess_memory,
-        user_message=payload.message,
-        agent_reply=reply_dict["text"]
+    reply_model = MessageReply(
+        text=result["reply_text"],
+        ooc=result["reply_ooc"],
     )
-
-        # 7) Sauvegarder les messages complets dans la session
-    session_data["messages"] = raw_messages
-    session_data["memory"] = updated_memory
-    memory_manager.save_session(session_id=session_id, data=session_data)
-
-        # 8) Construire la réponse HTTP
-    reply_model = MessageReply(text=reply_dict["text"], ooc=reply_dict["ooc"])
 
     return MessageResponse(
             session_id=session_id,

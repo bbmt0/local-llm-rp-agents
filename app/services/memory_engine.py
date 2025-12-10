@@ -70,7 +70,7 @@ class MemoryEngine:
             
         return new_trust
     
-    def _update_session_memory(self, session_memory: Dict[str, Any] | None,
+    def update_session_memory(self, session_memory: Dict[str, Any] | None,
                                user_message: str, agent_reply: str) -> Dict[str, Any]:
         """
         Mise à jour de la mémoire de la sessions  
