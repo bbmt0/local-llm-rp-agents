@@ -12,7 +12,13 @@ class LLMClient:
     def __init__(self) -> None:
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.model_name = os.getenv("OLLAMA_MODEL_NAME", "mistral-nemo")
-        self.timeout = 60.0
+        # Pour le dev, on met large, on resserrera après
+        self.timeout = httpx.Timeout(
+            connect=5.0,   # 5s pour se connecter au serveur
+            read=120.0,    # 120s max pour lire la réponse du modèle
+            write=10.0,
+            pool=5.0,
+        )
 
     async def chat(self, messages: List[Dict[str, str]]) -> str:
         """
@@ -26,22 +32,22 @@ class LLMClient:
             "stream": False,
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(url, json=payload)
+        print(f"[LLMClient] Calling {url} with model={self.model_name}, messages={len(messages)}")
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, json=payload)
+        except httpx.TimeoutException as exc:
+            # Ici tu verras clairement si c'est un timeout connect/read
+            raise RuntimeError(f"Timeout en appelant le LLM: {exc}") from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"Erreur réseau en appelant le LLM: {exc}") from exc
 
         response.raise_for_status()
         data = response.json()
 
-        # Format de réponse Ollama /api/chat :
-        # {
-        #   "model": "...",
-        #   "created_at": "...",
-        #   "message": {"role": "assistant", "content": "..."},
-        #   ...
-        # }
         message = data.get("message") or {}
         content = message.get("content")
-        timestamp = message.get("timestamp") or {}
 
         if not isinstance(content, str):
             raise ValueError("Réponse LLM invalide : 'content' manquant ou non textuel.")

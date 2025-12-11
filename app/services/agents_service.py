@@ -107,33 +107,32 @@ class AgentService:
 
         # 6) Appeler le LLM via agents_manager
         try:
-            reply_dict = await agents_manager.generate_reply(
+            contract = await agents_manager.generate_reply(
                 agent_id=agent_id,
                 history=history_for_llm,
                 user_message=message,
-                session_memory=raw_sess_memory,
-                meta=meta,
+                session_memory=raw_sess_memory                
             )
         except AgentNotFoundError as exc:
             raise exc
         except Exception as exc:
             raise RuntimeError(f"LLM error: {exc}") from exc
 
-        reply_text = reply_dict.get("text")
-        reply_ooc = reply_dict.get("ooc", False)
+        reply_text = contract.reply.text
+        reply_ooc = contract.meta.ooc_flag
 
         if not isinstance(reply_text, str):
             raise RuntimeError("Invalid reply format from LLM: missing 'text'")
 
-        # 7) Ajouter la réponse de l'assistant
+        # 7) Ajouter la réponse de l'agent
         current_time_reply = datetime.now().astimezone().isoformat()
 
-        assistant_message_full = {
+        agent_message_full = {
             "role": "assistant",
             "content": reply_text,
             "timestamp": current_time_reply,
         }
-        raw_messages.append(assistant_message_full)
+        raw_messages.append(agent_message_full)
 
         # 8) Mettre à jour la mémoire
         updated_memory = memory_engine.update_session_memory(

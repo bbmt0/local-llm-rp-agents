@@ -7,6 +7,7 @@ from typing import Dict, List, Any
 from pydantic import BaseModel, ValidationError
 
 from app.services.llm_client import LLMClient
+from app.services.llm_types import (LLMContract, ReplyContent, MemoryUpdate, Metagame)
 
 
 class AgentNotFoundError(Exception):
@@ -74,6 +75,14 @@ class AgentManager:
             raise AgentNotFoundError(f"Agent inconnu: {agent_id}")
         return config
 
+    @staticmethod
+    def _extract_json_content(raw: str) -> str:
+        start = raw.find('{')
+        end = raw.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("impossible de trouver un JSON dans la réponse")
+        return raw[start : end + 1]
+    
     async def generate_reply(
         self,
         agent_id: str,
@@ -114,34 +123,30 @@ class AgentManager:
         )
 
         raw_response = await self.llm_client.chat(messages)
+        
+        try: 
+            json_str = self._extract_json_content(raw_response)
+            contract = LLMContract.model_validate_json(json_str)
+        
+        except Exception: 
+            """
+            Si modèle renvoyé ne respecte pas le contract (structure exacte attendue), création d'un contrat minimal artificiel
+            """
+            fallback_rep = ReplyContent(
+                text=raw_response.strip(),
+                tone="neutre",
+                emotion=None     
+            )
+            fallback_memory_upd = MemoryUpdate()
+            fallback_meta = Metagame(ooc_flag=False,safety_flag=False)
 
-        reply_text: str
-        is_ooc: bool
-
-        try:
-            parsed = json.loads(raw_response)
-            if not isinstance(parsed, dict):
-                raise ValueError("JSON de réponse non dict.")
-
-            reply_text_value = parsed.get("reply_text")
-            if not isinstance(reply_text_value, str):
-                raise ValueError("Champ 'reply_text' manquant ou non textuel.")
-
-            is_ooc_value = parsed.get("is_ooc", False)
-            is_ooc_bool = bool(is_ooc_value)
-
-            reply_text = reply_text_value
-            is_ooc = is_ooc_bool
-        except Exception:
-            # Fallback : si le modèle n'a pas respecté le format,
-            # on renvoie le texte brut et on marque ooc = False.
-            reply_text = raw_response
-            is_ooc = False
-
-        return {
-            "text": reply_text,
-            "ooc": is_ooc,
-        }
+            contract= LLMContract(
+                reply= fallback_rep,
+                actions=[],
+                memory_update= fallback_memory_upd,
+                meta=fallback_meta
+            )
+        return contract
 
 
 agents_manager = AgentManager()

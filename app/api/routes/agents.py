@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from app.services.agents_manager import agents_manager, AgentNotFoundError
 from app.services.memory_manager import memory_manager, SessionNotFoundError
 from app.services.memory_engine import memory_engine
-from app.services.agents_service import agents_service
+from app.services.agents_service import agents_service, SessionMismatchError
 
 router = APIRouter(prefix="/v0/agents", tags=["agents"])
 
@@ -65,7 +65,7 @@ async def send_message(
     payload: MessageRequest,
     ) -> MessageResponse:
     try:
-        result = await agent_service.handle_message(
+        result = await agents_service.handle_message(
             agent_id=agent_id,
             session_id=session_id,
             message=payload.message,
