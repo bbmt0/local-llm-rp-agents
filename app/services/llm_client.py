@@ -11,14 +11,18 @@ class LLMClient:
 
     def __init__(self) -> None:
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "mistral-nemo")
-        # Pour le dev, on met large, on resserrera après
+        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "hermes3")
         self.timeout = httpx.Timeout(
             connect=5.0,   # 5s pour se connecter au serveur
             read=120.0,    # 120s max pour lire la réponse du modèle
             write=10.0,
             pool=5.0,
         )
+        self.num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "2048"))          # 2k au lieu de 128k
+        self.num_predict = int(os.getenv("OLLAMA_NUM_PREDICT", "256"))   # limite la réponse
+        self.temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
+        self.top_p = float(os.getenv("OLLAMA_TOP_P", "0.9"))
+
 
     async def chat(self, messages: List[Dict[str, str]]) -> str:
         """

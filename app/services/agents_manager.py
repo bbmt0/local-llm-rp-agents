@@ -77,7 +77,7 @@ class AgentManager:
 
     @staticmethod
     def _extract_json_content(raw: str) -> str:
-        start = raw.find('{')
+        start = raw.find("{")
         end = raw.rfind("}")
         if start == -1 or end == -1 or end <= start:
             raise ValueError("impossible de trouver un JSON dans la réponse")

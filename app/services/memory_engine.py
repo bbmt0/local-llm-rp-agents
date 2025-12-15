@@ -2,111 +2,103 @@ from __future__ import annotations
 
 from typing import Dict, Any, List
 
+from app.services.llm_types import MemoryUpdate  
+
+
 class MemoryEngine:
     """
-    Moteur permettant de mettre à jour la mémoire via la session : 
-        - garde les derniers échanges dans recent_events
-        - détecte les key_facts_about_player
-        - ajuste le trust_level
+    Applique les updates de mémoire fournis par le LLM (memory_update)
+    de manière déterministe.
     """
-    
+
     def ensure_structure(self, session_memory: Dict[str, Any] | None) -> Dict[str, Any]:
-        """
-            Sécurité pour que la mémoire garde toujours la même structure
-        """
+        # NEW: normalisation simple, sans heuristiques
         if not isinstance(session_memory, dict):
             session_memory = {}
-        
-        recent_events = session_memory.get("recent_events")
-        if not isinstance(recent_events, list):
-            recent_events = []
 
         facts = session_memory.get("facts_about_player")
         if not isinstance(facts, list):
             facts = []
-            
+
+        events = session_memory.get("recent_events")
+        if not isinstance(events, list):
+            events = []
+
         trust_level = session_memory.get("trust_level")
-        if not isinstance(trust_level, float):
+        if not isinstance(trust_level, (int, float)):
             trust_level = 0.0
-            
+        trust_level = float(trust_level)
+
         emotion = session_memory.get("emotion_towards_player")
-        if not isinstance(emotion, str) and emotion is not None:
+        if emotion is not None and not isinstance(emotion, str):
             emotion = None
-        
+
         return {
-            "recent_events": recent_events, 
-            "facts_about_player": facts, 
+            "facts_about_player": [f for f in facts if isinstance(f, str) and f.strip()],
+            "recent_events": [e for e in events if isinstance(e, str) and e.strip()],
             "trust_level": trust_level,
-            "trust_level": float(trust_level)
+            "emotion_towards_player": emotion,
         }
-        
-    
-    def _extract_fact_from_user(self, user_message: str) -> str | None:
-        text = user_message.lower().strip()
-        triggers_words = ["je suis ", "je m'appelle ", "moi c'est ", "mon nom est ", "mon nom c'est ", "mon prénom"]
-        for trig in triggers_words: 
-            if trig in text: 
-                return user_message
-        
-        return None
-    
-    def _update_trust_level(self, trust_level: float, user_message: str, agent_reply: str) -> float: 
-        text = user_message.lower()
-        
-        positive_keywords = ["merci", "enchanté", "sympa", "tu gères", "top"]
-        negative_keywords = ["enfoiré"]
-        
-        d = 0.0
-        if any (k in text for k in positive_keywords):
-            d += 0.05
-        if any (k in text for k in negative_keywords):
-            d -= 0.1
-            
-        new_trust = trust_level + d
-        if new_trust < 0.0:
-            new_trust = 0.0
-        if new_trust > 1.0:
-            new_trust = 1.0
-            
-        return new_trust
-    
-    def update_session_memory(self, session_memory: Dict[str, Any] | None,
-                               user_message: str, agent_reply: str) -> Dict[str, Any]:
-        """
-        Mise à jour de la mémoire de la sessions  
-        """
-        
+
+    def apply_contract_memory_update(
+        self,
+        session_memory: Dict[str, Any] | None,
+        memory_update: MemoryUpdate,
+        *,
+        max_facts: int = 50,
+        max_events: int = 30,
+    ) -> Dict[str, Any]:
         memory = self.ensure_structure(session_memory)
-        
-        # AJout évènement récent
-        recent_events: List[str] = memory["recent_events"]
-        recent_events.append(user_message)
-        
-        # garder les 20 derniers msg
-        if len(recent_events) > 20:
-            recent_events = recent_events[-20:]
-        memory["recent_events"] = recent_events
-        
-        #extract facts sur le joueur
-        fact = self._extract_fact_from_user(user_message)
-        if fact is not None: 
-                facts: List[str] = memory("facts_about_player")
-                if fact not in facts:
-                    facts.append(fact)
-                memory["facts_about_player"] = facts
-                
-        #update le trust level
-        memory["trust_level"] = self._update_trust_level(
-            trust_level=memory["trust_level"],
-            user_message=user_message,
-            agent_reply=agent_reply
-        )
-        
+
+        # --- facts_about_player ---
+        if memory_update.facts_about_player:
+            for fact in memory_update.facts_about_player:
+                if not isinstance(fact, str):
+                    continue
+                fact = fact.strip()
+                if not fact:
+                    continue
+                if fact not in memory["facts_about_player"]:
+                    memory["facts_about_player"].append(fact)
+
+        memory["facts_about_player"] = memory["facts_about_player"][-max_facts:]
+
+        # --- recent_events ---
+        if memory_update.recent_events:
+            for ev in memory_update.recent_events:
+                if not isinstance(ev, str):
+                    continue
+                ev = ev.strip()
+                if not ev:
+                    continue
+                memory["recent_events"].append(ev)
+
+        memory["recent_events"] = memory["recent_events"][-max_events:]
+
+        # --- trust level ---
+        delta = float(memory_update.trust_level or 0.0)
+
+        # clamp delta
+        if delta > 0.2:
+            delta = 0.2
+        elif delta < -0.2:
+            delta = -0.2
+
+        trust_level = float(memory["trust_level"]) + delta
+
+        # clamp trust_level 0..1
+        if trust_level < 0.0:
+            trust_level = 0.0
+        elif trust_level > 1.0:
+            trust_level = 1.0
+
+        memory["trust_level"] = trust_level
+
+        #  emotion_towards_player 
+        if memory_update.emotion_towards_player:
+            memory["emotion_towards_player"] = memory_update.emotion_towards_player
+
         return memory
 
+
 memory_engine = MemoryEngine()
-        
-           
-        
-        
-        

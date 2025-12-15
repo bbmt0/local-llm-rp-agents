@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
 class ReplyContent(BaseModel):
@@ -23,9 +23,9 @@ class Metagame(BaseModel):
     
 class LLMContract(BaseModel):
     reply: ReplyContent
-    actions: List[Action] = []
-    memory_update: MemoryUpdate
-    meta: Metagame
+    actions: List[Action] = Field(default_factory = list)
+    memory_update: MemoryUpdate = Field(default_factory = MemoryUpdate)
+    meta: Metagame = Field(default_factory = Metagame)
 
 
     

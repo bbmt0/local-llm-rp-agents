@@ -46,7 +46,7 @@ class AgentService:
         message: str,
         meta: Optional[Dict[str, str]] = None,
     ) -> Dict[str, object]:
-        # 1) Charger la session
+        # 1) Charger la ses sion
         try:
             session_data: Dict[str, object] = memory_manager.load_session(session_id)
         except SessionNotFoundError as exc:
@@ -99,11 +99,6 @@ class AgentService:
         }
         raw_messages.append(user_msg_full)
 
-        user_msg_for_llm = {
-            "role": "user",
-            "content": message,
-        }
-        history_for_llm.append(user_msg_for_llm)
 
         # 6) Appeler le LLM via agents_manager
         try:
@@ -135,16 +130,19 @@ class AgentService:
         raw_messages.append(agent_message_full)
 
         # 8) Mettre à jour la mémoire
-        updated_memory = memory_engine.update_session_memory(
-            session_memory=raw_sess_memory,
-            user_message=message,
-            agent_reply=reply_text,
-        )
+        updated_memory = memory_engine.apply_contract_memory_update( 
+        session_memory=raw_sess_memory,
+        memory_update=contract.memory_update,
+)
+
 
         # 9) Sauvegarder la session
         session_data["messages"] = raw_messages
         session_data["memory"] = updated_memory
         memory_manager.save_session(session_id=session_id, data=session_data)
+        
+        
+        print("[DEBUG] memory_update:", contract.memory_update.model_dump())
 
         # 10) Retourner les infos utiles au layer API
         return {
