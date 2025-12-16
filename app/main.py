@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+load_dotenv()
 
 from app.api.routes.agents import router as agents_router
 

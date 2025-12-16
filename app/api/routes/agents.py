@@ -3,13 +3,16 @@ from typing import Dict, List
 from uuid import uuid4
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from app.services.agents_manager import agents_manager, AgentNotFoundError
 from app.services.memory_manager import memory_manager, SessionNotFoundError
 from app.services.memory_engine import memory_engine
 from app.services.agents_service import agents_service, SessionMismatchError
+
+from app.core.auth import verify_token
+
 
 router = APIRouter(prefix="/v0/agents", tags=["agents"])
 
@@ -58,7 +61,7 @@ async def create_session(agent_id: str) -> CreateSessionResponse:
     return CreateSessionResponse(session_id=session_id, agent_id=agent_id)
 
 
-@router.post("/{agent_id}/sessions/{session_id}/messages", response_model=MessageResponse)
+@router.post("/{agent_id}/sessions/{session_id}/messages", response_model=MessageResponse, dependencies=[Depends(verify_token)])
 async def send_message(
     agent_id: str,
     session_id: str,
@@ -71,7 +74,7 @@ async def send_message(
             message=payload.message,
             meta=payload.meta,
         )
-    except SessionNotFoundError:
+    except SessionNotFoundError: 
         raise HTTPException(status_code=404, detail="Session not found")
     except SessionMismatchError:
         raise HTTPException(status_code=404, detail="Session not found for this agent")
