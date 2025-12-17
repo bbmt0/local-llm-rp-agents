@@ -88,6 +88,7 @@ class AgentService:
             content = msg.get("content")
             if isinstance(role, str) and isinstance(content, str):
                 history_for_llm.append({"role": role, "content": content})
+                history_for_llm = history_for_llm[-12:]
 
         # 5) Ajouter le message utilisateur
         current_time = datetime.now().astimezone().isoformat()
