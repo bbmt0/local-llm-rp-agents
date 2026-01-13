@@ -11,7 +11,7 @@ class LLMClient:
 
     def __init__(self) -> None:
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "hermes3")
+        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "mistral-nemo")
         self.timeout = httpx.Timeout(
             connect=5.0,   # 5s pour se connecter au serveur
             read=120.0,    # 120s max pour lire la réponse du modèle
@@ -42,7 +42,7 @@ class LLMClient:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, json=payload)
         except httpx.TimeoutException as exc:
-            # Ici tu verras clairement si c'est un timeout connect/read
+
             raise RuntimeError(f"Timeout en appelant le LLM: {exc}") from exc
         except httpx.RequestError as exc:
             raise RuntimeError(f"Erreur réseau en appelant le LLM: {exc}") from exc

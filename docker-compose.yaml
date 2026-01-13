@@ -1,0 +1,29 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  api:
+    build: .
+    container_name: fastapi_api
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL_NAME: "mistral-nemo:latest"
+      OLLAMA_NUM_CTX: "2048"
+      OLLAMA_NUM_PREDICT: "256"
+      OLLAMA_TEMPERATURE: "0.2"
+      OLLAMA_TOP_P: "0.9"
+    depends_on:
+      - ollama
+    volumes:
+      - ./app:/code/app
+      - ./data:/code/data
+
+volumes:
+  ollama_data:
