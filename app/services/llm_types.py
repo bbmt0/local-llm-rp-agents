@@ -21,7 +21,7 @@ class Metagame(BaseModel):
     ooc_flag: bool = False
     safety_flag: bool = False
     
-class LLMContract(BaseModel):
+class PNJReplyContract(BaseModel):
     reply: ReplyContent
     actions: List[Action] = Field(default_factory = list)
     memory_update: MemoryUpdate = Field(default_factory = MemoryUpdate)

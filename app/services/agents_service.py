@@ -46,7 +46,7 @@ class AgentService:
         message: str,
         meta: Optional[Dict[str, str]] = None,
     ) -> Dict[str, object]:
-        # 1) Charger la ses sion
+        # 1) Charger la session
         try:
             session_data: Dict[str, object] = memory_manager.load_session(session_id)
         except SessionNotFoundError as exc:

@@ -11,7 +11,7 @@ class LLMClient:
 
     def __init__(self) -> None:
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "mistral-nemo")
+        self.model_name = os.getenv("OLLAMA_MODEL_NAME", "llama3.2")
         self.timeout = httpx.Timeout(
             connect=5.0,   # 5s pour se connecter au serveur
             read=120.0,    # 120s max pour lire la réponse du modèle

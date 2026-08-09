@@ -7,7 +7,7 @@ from typing import Dict, List, Any
 from pydantic import BaseModel, ValidationError
 
 from app.services.llm_client import LLMClient
-from app.services.llm_types import (LLMContract, ReplyContent, MemoryUpdate, Metagame)
+from app.services.llm_types import (PNJReplyContract, ReplyContent, MemoryUpdate, Metagame)
 
 
 class AgentNotFoundError(Exception):
@@ -106,7 +106,6 @@ class AgentManager:
             }
         )
 
-        # Historique des messages : on le passe tel quel pour le MVP.
         for msg in history:
             if not isinstance(msg, dict):
                 continue
@@ -126,7 +125,7 @@ class AgentManager:
         
         try: 
             json_str = self._extract_json_content(raw_response)
-            contract = LLMContract.model_validate_json(json_str)
+            contract = PNJReplyContract.model_validate_json(json_str)
         
         except Exception: 
             """
@@ -140,7 +139,7 @@ class AgentManager:
             fallback_memory_upd = MemoryUpdate()
             fallback_meta = Metagame(ooc_flag=False,safety_flag=False)
 
-            contract= LLMContract(
+            contract= PNJReplyContract(
                 reply= fallback_rep,
                 actions=[],
                 memory_update= fallback_memory_upd,
