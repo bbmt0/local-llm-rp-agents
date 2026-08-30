@@ -1,9 +1,8 @@
 requests
 fastapi
-beautifulsoup4
-pillow
-pytesseract
 httpx
 uvicorn[standard]
 pydantic
 pathlib
+pytest
+pytest-cov
