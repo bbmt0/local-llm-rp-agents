@@ -19,8 +19,6 @@ def verify_token(authorization: str = Header(...)):
     token = authorization.removeprefix("Bearer ").strip()
 
     if token != API_TOKEN:
-        print("TOKEN", token)
-        print("API_TOKEN", API_TOKEN)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API token",

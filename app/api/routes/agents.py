@@ -5,11 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-
-from app.services.agents_manager import agents_manager, AgentNotFoundError
-from app.services.memory_manager import memory_manager, SessionNotFoundError
-from app.services.memory_engine import memory_engine
-from app.services.agents_service import agents_service, SessionMismatchError
+from app.services.agents_service import agents_service, SessionMismatchError, AgentNotFoundError, SessionNotFoundError
 
 from app.core.auth import verify_token
 
@@ -47,7 +43,10 @@ class MessageResponse(BaseModel):
 
 @router.get("", response_model=List[Agent])
 async def list_agents() -> List[Agent]:
-    raw_agents = agents_service.list_agents()
+    try: 
+        raw_agents = agents_service.list_agents()
+    except RuntimeError as exc: 
+        raise HTTPException(status_code=500,detail=str(exc))
     return [Agent(**a) for a in raw_agents]
 
 
@@ -57,6 +56,8 @@ async def create_session(agent_id: str) -> CreateSessionResponse:
         session_id = agents_service.create_session(agent_id)
     except AgentNotFoundError:
         raise HTTPException(status_code=404, detail="Agent not found")
+    except RuntimeError as exc: 
+        raise HTTPException(status_code=500, detail=str(exc))
 
     return CreateSessionResponse(session_id=session_id, agent_id=agent_id)
 
