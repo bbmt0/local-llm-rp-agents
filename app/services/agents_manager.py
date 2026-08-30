@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
 from pathlib import Path
 from typing import Dict, List, Any
-
 from pydantic import BaseModel, ValidationError
-
 from app.services.llm_client import LLMClient
 from app.services.llm_types import (PNJReplyContract, ReplyContent, MemoryUpdate, Metagame)
 
@@ -42,9 +44,7 @@ class AgentConfig(BaseModel):
     memory: AgentMemory | None = None
 
 class AgentManager:
-    """
-    Gère les prompts des agents, l'appel au LLM et le parsing de la réponse.
-    """
+
 
     def __init__(self, base_dir: str = "data/agents") -> None:
         self.base_path = Path(base_dir)
@@ -57,22 +57,25 @@ class AgentManager:
         if not self.base_path.exists():
             return configs
 
+        logger.info(f"Loading agent configuration from {self.base_path}")
         for path in self.base_path.glob("*.json"):
             try: 
                 with path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-                
+
                 agent_conf = AgentConfig(**data)
                 configs[agent_conf.id] = agent_conf
+                logger.debug(f"Config agent {agent_conf.id} loaded")
             except (json.JSONDecodeError, ValidationError) as exc: 
-                print(f"[AgentsManager] Erreur de chargement agent depuis {path}: {exc}")
-
+                logger.error(f"File loading error for {path}: {exc}")
+        
         return configs
 
     def _get_agent_config(self, agent_id: str) -> AgentConfig:
         config = self.agents_config.get(agent_id)
         if config is None:
-            raise AgentNotFoundError(f"Agent inconnu: {agent_id}")
+            logger.error(f"Agent {agent_id} not found in the loaded datas")
+            raise AgentNotFoundError(f"Agent not found: {agent_id}")
         return config
 
     @staticmethod
@@ -80,7 +83,7 @@ class AgentManager:
         start = raw.find("{")
         end = raw.rfind("}")
         if start == -1 or end == -1 or end <= start:
-            raise ValueError("impossible de trouver un JSON dans la réponse")
+            raise ValueError("no json file found in the return")
         return raw[start : end + 1]
     
     async def generate_reply(
@@ -90,10 +93,6 @@ class AgentManager:
         user_message: str,
         session_memory: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        """
-        Construit le prompt complet, appelle le LLM, parse la réponse JSON
-        et renvoie un dict: {\"text\": str, \"ooc\": bool}.
-        """
         agent_config = self._get_agent_config(agent_id)
         system_prompt = agent_config.system_prompt
 
@@ -122,15 +121,15 @@ class AgentManager:
         )
 
         raw_response = await self.llm_client.chat(messages)
-        
+        logger.info(f"Answer generation for agent: {agent_id}")
+
         try: 
             json_str = self._extract_json_content(raw_response)
             contract = PNJReplyContract.model_validate_json(json_str)
+            logger.debug(f"Answer from {agent_id} agent generated with success")
         
         except Exception: 
-            """
-            Si modèle renvoyé ne respecte pas le contract (structure exacte attendue), création d'un contrat minimal artificiel
-            """
+            logger.warning(f"LLM answer non conform with the contract for agent {agent_id}, creation of an artificial minimal contract")
             fallback_rep = ReplyContent(
                 text=raw_response.strip(),
                 tone="neutre",

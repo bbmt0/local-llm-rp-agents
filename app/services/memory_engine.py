@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Optional, List
 
+from app.services.memory_types import SessionMemory, AgentMemory
 from app.services.llm_types import MemoryUpdate  
 
 
 class MemoryEngine:
-    """
-    Applique les updates de mémoire fournis par le LLM (memory_update)
-    de manière déterministe.
-    """
-
     def ensure_structure(self, session_memory: Dict[str, Any] | None) -> Dict[str, Any]:
-        # NEW: normalisation simple, sans heuristiques
         if not isinstance(session_memory, dict):
             session_memory = {}
 
@@ -42,12 +37,12 @@ class MemoryEngine:
 
     def apply_contract_memory_update(
         self,
-        session_memory: Dict[str, Any] | None,
+        session_memory: Optional[SessionMemory],
         memory_update: MemoryUpdate,
         *,
         max_facts: int = 50,
         max_events: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> SessionMemory:
         memory = self.ensure_structure(session_memory)
 
         # --- facts_about_player ---
