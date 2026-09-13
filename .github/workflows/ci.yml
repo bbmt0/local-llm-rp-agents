@@ -39,6 +39,7 @@ jobs:
 
       - name: Run tests
         env:
+          API_BEARER_TOKEN: "test-token"
           OLLAMA_BASE_URL: "http://localhost:11434"
           OLLAMA_MODEL_NAME: "llama3.2:latest"
           OLLAMA_NUM_CTX: "2048"
