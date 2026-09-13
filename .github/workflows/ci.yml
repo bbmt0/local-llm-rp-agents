@@ -1,0 +1,65 @@
+name: CI
+
+on: 
+  push: 
+    branches:
+      - main
+
+jobs: 
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        container_name: ollama
+        ports: 
+          - "11434:11434"
+        volumes:
+          - ollama_data:/root/.ollama
+
+    steps: 
+      - name: checkout code
+        uses: actions/checkout@v2
+
+      - name: setup Python
+        uses: actions/setup-python@v5
+        with: 
+          python-version: '3.10'
+      
+      - name: install required dependencies
+        run: | 
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: run tests
+        run: pytest
+
+      - name: run Ruff 
+        run: ruff app/
+
+      - name: build Docker Compose services 
+        run: docker-compose build api 
+
+      - name: start docker compose services 
+        run: docker-compose up -d ollama
+
+      - name: wait for the container to be up 
+        run: sleep 30
+
+      - name: (re)run unit tests in docker
+        run: |
+          docker-compose exec api pytest tests
+      
+      - name: stop docker compose services
+        run: docker-compose down
+
+volumes: 
+  ollama_data:
+
+
+      
+        
+
+
+      
