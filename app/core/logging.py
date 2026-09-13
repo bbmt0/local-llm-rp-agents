@@ -12,6 +12,8 @@ def setup_logging():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+    Path("logs").mkdir(parents=True, exist_ok=True)
+
     file_handler = RotatingFileHandler(
         "logs/app.log",
         maxBytes=5 * 1024 * 1024,  
