@@ -45,7 +45,7 @@ jobs:
           OLLAMA_NUM_PREDICT: "256"
           OLLAMA_TEMPERATURE: "0.2"
           OLLAMA_TOP_P: "0.9"
-        run: pytest
+        run: python -m pytest
 
       - name: Run Ruff
         run: ruff check app/
